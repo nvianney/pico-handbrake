@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.13)
 # note: this must happen before project()
 include(pico_sdk_import.cmake)
 
-project(my_project)
+project(handbrake)
 
 # initialize the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -13,12 +13,19 @@ pico_sdk_init()
 
 if (TARGET tinyusb_device)
 
-    add_executable(pico_handbrake
+    add_executable(pico_handbrake)
+
+    target_sources(pico_handbrake PUBLIC
         main.cpp
+        usb_descriptors.cpp
+    )
+
+    target_include_directories(pico_handbrake PUBLIC
+        ./
     )
 
     # Add pico_stdlib library which aggregates commonly used features
-    target_link_libraries(pico_handbrake pico_stdlib)
+    target_link_libraries(pico_handbrake PUBLIC pico_stdlib tinyusb_device tinyusb_board)
 
     pico_enable_stdio_usb(pico_handbrake 1)
     pico_enable_stdio_uart(pico_handbrake 0)
