@@ -9,6 +9,9 @@
 
 #include "usb_descriptors.h"
 
+#include "hardware/gpio.h"
+#include "hardware/adc.h"
+
 #define INTERVAL_MS 10
 
 
@@ -17,17 +20,26 @@
 
 struct State {
     uint32_t pressed = 0;
+
+    uint8_t sensor = 0;
 } state;
 
 void hid_task(State &state);
+void update(State &state);
 
 int main() {
     board_init();
     tusb_init();
+    adc_init();
+
+    adc_gpio_init(26);
+    adc_select_input(0);
 
     uint32_t start_ms = 0;
     while (true) {
         tud_task();
+
+        update(state);
 
         if (board_millis() - start_ms >= INTERVAL_MS) {
             start_ms += INTERVAL_MS;
@@ -104,6 +116,7 @@ static void send_hid_report(uint8_t report_id, State &state, uint32_t btn) {
 
             report.hat = GAMEPAD_HAT_UP;
             report.buttons = GAMEPAD_BUTTON_A;
+            report.rx = (int8_t) state.sensor;
             tud_hid_report(REPORT_ID_GAMEPAD, &report, sizeof(report));
 
         } else {
@@ -116,6 +129,11 @@ static void send_hid_report(uint8_t report_id, State &state, uint32_t btn) {
             }
         }
     }
+}
+
+void update(State &state) {
+    // output = (1 << 8) * (adc_read() / (1 << 12))
+    state.sensor = ((1 << 8) * adc_read()) / (1 << 12);
 }
 
 void hid_task(State &state) {

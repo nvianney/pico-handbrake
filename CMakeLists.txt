@@ -25,7 +25,7 @@ if (TARGET tinyusb_device)
     )
 
     # Add pico_stdlib library which aggregates commonly used features
-    target_link_libraries(pico_handbrake PUBLIC pico_stdlib tinyusb_device tinyusb_board)
+    target_link_libraries(pico_handbrake PUBLIC pico_stdlib tinyusb_device tinyusb_board hardware_adc)
 
     pico_enable_stdio_usb(pico_handbrake 1)
     pico_enable_stdio_uart(pico_handbrake 0)
