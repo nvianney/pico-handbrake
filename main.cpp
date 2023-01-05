@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include "bsp/board.h"
 #include "tusb.h"
@@ -21,8 +22,19 @@
 struct State {
     uint32_t pressed = 0;
 
-    uint8_t sensor = 0;
+    const uint16_t adc_min = 0x800;
+    int8_t sensor = -(1 << 7);
 } state;
+
+template<typename T>
+float inv_lerp(T val, T min, T max) {
+    return ((float) (val - min)) / ((float) (max - min));
+}
+
+template<typename T>
+T lerp(float a, T min, T max) {
+    return (T) (a * (float) (max - min)) + min;
+}
 
 void hid_task(State &state);
 void update(State &state);
@@ -82,65 +94,62 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
 // USB HID
 //--------------------------------------------------------------------+
 
-static void send_hid_report(uint8_t report_id, State &state, uint32_t btn) {
+static void send_handbrake_data(State &state) {
     if (!tud_hid_ready()) return;
+    hid_gamepad_report_t report = {
+        .x = 0,
+        .y = 0,
+        .z = 0,
+        .rz = 0,
+        .rx = 0,
+        .ry = 0,
+        .hat = 0,
+        .buttons = 0
+    };
+    report.hat = GAMEPAD_HAT_CENTERED;
+    report.rx = state.sensor;
+    tud_hid_report(REPORT_ID_GAMEPAD, &report, sizeof(report));
+    /* if (btn) { */
+    /*     state.pressed |= GAMEPAD; */
 
-    if (report_id == REPORT_ID_KEYBOARD) {
-        if (btn) {
-            state.pressed |= KEYBOARD;
+    /*     report.hat = GAMEPAD_HAT_UP; */
+    /*     report.buttons = GAMEPAD_BUTTON_A; */
+    /*     report.rx = (int8_t) state.sensor; */
+    /*     tud_hid_report(REPORT_ID_GAMEPAD, &report, sizeof(report)); */
 
-            uint8_t keycode[6] = {0};
-            keycode[0] = HID_KEY_A;
+    /* } else { */
+    /*     report.hat = GAMEPAD_HAT_CENTERED; */
+    /*     report.buttons = 0; */
 
-            tud_hid_keyboard_report(REPORT_ID_KEYBOARD, 0, keycode);
-        } else {
-            if (state.pressed & KEYBOARD) {
-                state.pressed &= ~KEYBOARD;
-                tud_hid_keyboard_report(REPORT_ID_KEYBOARD, 0, NULL);
-            }
-        }
-
-    } else if (report_id == REPORT_ID_GAMEPAD) {
-        hid_gamepad_report_t report = {
-            .x = 0,
-            .y = 0,
-            .z = 0,
-            .rz = 0,
-            .rx = 0,
-            .ry = 0,
-            .hat = 0,
-            .buttons = 0
-        };
-        if (btn) {
-            state.pressed |= GAMEPAD;
-
-            report.hat = GAMEPAD_HAT_UP;
-            report.buttons = GAMEPAD_BUTTON_A;
-            report.rx = (int8_t) state.sensor;
-            tud_hid_report(REPORT_ID_GAMEPAD, &report, sizeof(report));
-
-        } else {
-            report.hat = GAMEPAD_HAT_CENTERED;
-            report.buttons = 0;
-
-            if (state.pressed & GAMEPAD) {
-                tud_hid_report(REPORT_ID_GAMEPAD, &report, sizeof(report));
-                state.pressed &= ~GAMEPAD;
-            }
-        }
-    }
+    /*     if (state.pressed & GAMEPAD) { */
+    /*         tud_hid_report(REPORT_ID_GAMEPAD, &report, sizeof(report)); */
+    /*         state.pressed &= ~GAMEPAD; */
+    /*     } */
+    /* } */
 }
 
 void update(State &state) {
-    // output = (1 << 8) * (adc_read() / (1 << 12))
-    state.sensor = ((1 << 8) * adc_read()) / (1 << 12);
+    const uint16_t adc_max = 0xFFF; // pico has 12 bits ADC
+
+    uint16_t adc = adc_read();
+    /* if (adc < state.adc_min && board_millis() < 1000) { */
+        /* state.adc_min = adc; */
+    /* } */
+
+    uint16_t adc_begin = state.adc_min + (uint16_t) ((adc_max - state.adc_min) * 0.05f);
+
+    float a = inv_lerp(adc, adc_begin, adc_max);
+    if (a < 0) a = 0.0f;
+    a = sqrt(a);
+
+    state.sensor = (int8_t) lerp<int32_t>(a, -(1 << 7), (1 << 7) - 1);
 }
 
 void hid_task(State &state) {
     uint32_t const btn = board_button_read();
     if (tud_suspended()) return;
 
-    send_hid_report(REPORT_ID_GAMEPAD, state, btn);
+    send_handbrake_data(state);
 
 }
 
